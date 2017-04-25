@@ -1,0 +1,193 @@
+<?php
+
+/**
+ * @file
+ * Main module file for Field States UI.
+ */
+
+use Drupal\Core\Field\FieldDefinitionInterface;
+use Drupal\Core\Field\WidgetInterface;
+use Drupal\Core\Form\FormState;
+use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Implements hook_field_widget_third_party_settings_form().
+ */
+function field_states_ui_field_widget_third_party_settings_form(WidgetInterface $plugin, FieldDefinitionInterface $field_definition, $form_mode, $form, FormStateInterface $form_state) {
+  $current = $plugin->getThirdPartySetting('field_states_ui', 'states', []);
+  $field_state_manager = Drupal::service('plugin.manager.field_states_ui.fieldstate');
+  $field_name = $field_definition->getName();
+  $element = [
+    'field_states' => [
+      '#type' => 'fieldset',
+      '#title' => t('Manage Field States'),
+      '#description' => t('Configure field states - ie automatic hiding/showing of fields.'),
+      'list' => [
+        '#type' => 'table',
+        '#header' => [
+          t('Type'),
+          t('Comparison'),
+          t('Operations'),
+        ],
+        '#rows' => [],
+        '#empty' => t('There are no field states applied to this field currently. Add one by selecting an option below.'),
+      ],
+      'field_state_new' => [],
+    ],
+  ];
+  foreach ($plugin->getThirdPartySettings('field_states_ui') as $key => $state) {
+    if (!isset($state['id'])) {
+      continue;
+    }
+    $field_state = $field_state_manager->createInstance($state['id'], $state);
+    $element['field_states']['list']['#rows'][$key] = [
+      'type' => $field_state->label(),
+      'comparison' => $field_state->getSummary(),
+      'operations' => t('nothing to see here yet!'),
+    ];
+  }
+  if ($form_state->get('field_states_ui_add') == $field_name) {
+    $type = $form_state->getValue([
+      'fields',
+      $field_name,
+      'settings_edit_form',
+      'third_party_settings',
+      'field_states_ui',
+      'field_states',
+      'field_state_new',
+      'type',
+    ]);
+    $field_state = $field_state_manager->createInstance($type);
+    $element['field_states']['field_state_new']['form'] = $field_state->buildConfigurationForm([], $form_state);
+    $element['field_states']['field_state_new']['form']['#type'] = 'fieldset';
+    $element['field_states']['field_state_new']['form']['#title'] = t('Add new field state @type', ['@type' => $field_state->label()]);
+    $element['field_states']['field_state_new']['add'] = [
+      '#type' => 'submit',
+      '#value' => t('Add'),
+      '#validate' => ['field_states_ui_validate'],
+      '#submit' => ['field_states_ui_add'],
+      '#field_name' => $field_name,
+      '#op' => 'new',
+      '#plugin' => $type,
+    ];
+  }
+  else {
+    $field_state_options = [];
+    $field_states = $field_state_manager->getDefinitions();
+    foreach ($field_states as $field_state => $definition) {
+      $field_state_options[$field_state] = $definition['label'];
+    }
+    $element['field_states']['field_state_new']['type'] = [
+      '#type' => 'select',
+      '#title' => t('Field States'),
+      '#title_display' => 'invisible',
+      '#options' => $field_state_options,
+      '#empty_option' => t('Select a new field state'),
+    ];
+    $element['field_states']['field_state_new']['add'] = [
+      '#type' => 'submit',
+      '#value' => t('Add'),
+      '#validate' => ['field_states_ui_validate'],
+      '#submit' => ['field_states_ui_add'],
+      '#field_name' => $field_name,
+      '#op' => 'add',
+    ];
+  }
+  return $element;
+}
+
+/**
+ * Implements hook_field_widget_settings_summary_alter().
+ */
+function field_states_ui_field_widget_settings_summary_alter(&$summary, $context) {
+  if ($context['widget']->getThirdPartySettings('field_states_ui')) {
+    $summary[] = t('Field States applied.');
+  }
+}
+
+/**
+ * Implements hook_field_widget_form_alter().
+ */
+function field_states_ui_field_widget_form_alter(&$element, FormStateInterface $form_state, $context) {
+  $field_state_manager = Drupal::service('plugin.manager.field_states_ui.fieldstate');
+  $plugin = $context['widget'];
+
+  // Check that it is enabled for this field.
+  if (!$field_states = $plugin->getThirdPartySettings('field_states_ui')) {
+    return;
+  }
+  $states = [];
+  foreach ($field_states as $state) {
+    if (!isset($state['id'])) {
+      continue;
+    }
+    $field_state = $field_state_manager->createInstance($state['id'], $state);
+    $field_state->applyState($states, $form_state, $context);
+  }
+  if ($states) {
+    $field_definition = $context['items']->getFieldDefinition();
+    $type = $field_definition->getType();
+    $plugin_id = $plugin->getPluginId();
+    if ($type === 'entity_reference') {
+      if ($plugin_id === 'options_select' || $plugin_id === 'options_buttons') {
+        $element['#states'] = $states;
+      }
+      elseif ($plugin_id === 'entity_reference_autocomplete' || $plugin_id === 'entity_reference_autocomplete_tags') {
+        $element['target_id']['#states'] = $states;
+      }
+    }
+    elseif ($type === 'datetime' || $type === 'decimal' || $type === 'string_long') {
+      $element['value']['#states'] = $states;
+    }
+    else {
+      // At least for text_with_summary, and assume for unknowns.
+      // If wrong will cause no harm beyond failure to change state.
+      $element['#states'] = $states;
+    }
+  }
+}
+
+/**
+ * Submit function to add/edit field states.
+ */
+function field_states_ui_add($form, FormStateInterface $form_state) {
+  $trigger = $form_state->getTriggeringElement();
+  $field_name = $trigger['#field_name'];
+  $form_state->set('plugin_settings_edit', $field_name);
+
+  // Show the add new field state form for the specified field state type.
+  if ($trigger['#op'] == 'add') {
+    $form_state->set('field_states_ui_add', $field_name);
+  }
+  // Add the the new field state and save the field/entity.
+  elseif ($trigger['#op'] == 'new') {
+    $entity = $form_state->getFormObject()->getEntity();
+    $field = $entity->getComponent($field_name);
+
+    $field_state_manager = Drupal::service('plugin.manager.field_states_ui.fieldstate');
+    $field_state = $field_state_manager->createInstance($trigger['#plugin']);
+    $field_state_data = $form_state->getValue([
+      'fields',
+      $field_name,
+      'settings_edit_form',
+      'third_party_settings',
+      'field_states_ui',
+      'field_states',
+      'field_state_new',
+      'form',
+    ]);
+    $field_state->submitConfigurationForm($form, (new FormState())->setValues($field_state_data));
+    $field['third_party_settings']['field_states_ui'][$field_state->getUuid()] = $field_state->getConfiguration();
+    $entity->setComponent($field_name, $field);
+    $entity->save();
+    $form_state->set('field_states_ui_add', NULL);
+  }
+  $form_state->setRebuild();
+}
+
+/**
+ * Validation function for adding/editing field states.
+ */
+function field_states_ui_validate($form, FormStateInterface $form_state) {
+  return TRUE;
+}

@@ -1,0 +1,7 @@
+less.settings:
+  path: '/admin/config/development/less'
+  defaults:
+    _title: 'LESS'
+    _form: '\Drupal\less\Form\LessAdminForm'
+  requirements:
+    _permission: 'LESS_PERMISSION'
