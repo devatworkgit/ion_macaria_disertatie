@@ -1,0 +1,5 @@
+services:
+  less_event_subscriber:
+    class: Drupal\less\EventSubscriber\lessSubscriber
+    tags:
+      - {name: event_subscriber}

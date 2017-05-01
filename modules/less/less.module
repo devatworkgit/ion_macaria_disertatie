@@ -7,6 +7,8 @@
  * The theme system allows for nearly all output of the Drupal system to be
  * customized by user themes.
  */
+ 
+use Drupal\Core\Asset\AttachedAssetsInterface;
 
 define('LESS_PERMISSION', 'administer less');
 
@@ -53,22 +55,30 @@ function less_hook_info() {
 }
 
 /**
- * Implements hook_library_info_alter().
+ * Implements hook_css_alter().
+ *
+ * Convert the LESS files to CSS.
+ *
+ * @param $css
+ *   An array of all CSS items (files and inline CSS) being requested on the page.
+ * @param \Drupal\Core\Asset\AttachedAssetsInterface $assets
+ *   The assets attached to the current response.
+ *
+ * @see Drupal\Core\Asset\LibraryResolverInterface::getCssAssets()
  */
-function less_library_info_alter(&$libraries, $extension) {
-  
-  if ($extension == \Drupal::config('system.theme')->get('default')) {
+function less_css_alter(&$css, AttachedAssetsInterface $assets) {
 
-    $config = \Drupal::config('less.settings');
+  $config = \Drupal::config('less.settings');
 
-    kint($config);
-    if ($config->get(LESS_DEVEL) ?: FALSE) {
-      kint($libraries);
-      // Must run after drupal_pre_render_styles() to attach any attributes.
-      //array_push($info['styles']['#pre_render'], '_less_attach_src');
+  //kint($config);
+  if ($config->get(LESS_DEVEL) ?: FALSE) {
+    foreach ($css AS &$style) {
+      if ($style['type'] == 'file' && substr($style['data'], -5) == '.less') {
+      }
     }
   }
 }
+
 
 /**
  * Add original .less file path as 'src' attribute to <link />.
