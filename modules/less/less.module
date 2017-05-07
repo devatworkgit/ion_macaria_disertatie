@@ -9,6 +9,8 @@
  */
  
 use Drupal\Core\Asset\AttachedAssetsInterface;
+use Drupal\Component\Render\FormattableMarkup;
+use Drupal\less\Plugin\engines\LessEngineLess_php;
 
 define('LESS_PERMISSION', 'administer less');
 
@@ -54,31 +56,9 @@ function less_hook_info() {
   ));
 }
 
-/**
- * Implements hook_css_alter().
- *
- * Convert the LESS files to CSS.
- *
- * @param $css
- *   An array of all CSS items (files and inline CSS) being requested on the page.
- * @param \Drupal\Core\Asset\AttachedAssetsInterface $assets
- *   The assets attached to the current response.
- *
- * @see Drupal\Core\Asset\LibraryResolverInterface::getCssAssets()
- */
-function less_css_alter(&$css, AttachedAssetsInterface $assets) {
-
-  $config = \Drupal::config('less.settings');
-
-  //kint($config);
-  if ($config->get(LESS_DEVEL) ?: FALSE) {
-    foreach ($css AS &$style) {
-      if ($style['type'] == 'file' && substr($style['data'], -5) == '.less') {
-      }
-    }
-  }
+function less_element_info_alter(array &$types) {
+  $types['html']['#pre_render'][] = '_less_pre_render';
 }
-
 
 /**
  * Add original .less file path as 'src' attribute to <link />.
@@ -124,60 +104,94 @@ function _less_attach_src($styles) {
  * @return array
  *   Modified style elements pointing to compiled LESS output.
  */
-function _less_pre_render($styles) {
+function _less_pre_render($html) {
   
   $config = \Drupal::config('less.settings');
   
-  $less_devel = (bool) $config->get(LESS_DEVEL) ?: FALSE;
-  
-  if ($less_devel) {
-    
-    if ( $config->get(LESS_WATCH) ?: FALSE ) {
-      drupal_add_js(drupal_get_path('module', 'less') . '/scripts/less.watch.js');
-    }
-    
-    // Warn users once every hour that less is checking for file modifications.
-    if (user_access(LESS_PERMISSION) && flood_is_allowed('less_devel_warning', 1)) {
-      flood_register_event('less_devel_warning');
-      
-      $message_vars = array(
-        '@url' => url('admin/config/development/less'),
-      );
-      drupal_set_message(t('LESS files are being checked for modifications on every request. Remember to <a href="@url">turn off</a> this feature on production websites.', $message_vars), 'status');
-    }
+  if ($config->get(LESS_WATCH) ?: FALSE) {
+    $html['#attached']['library'][] = 'less/less-watch';
   }
   
-  $less_items = array_intersect_key($styles['#items'], array_flip(_less_children($styles['#items'])));
-
-  if (!empty($less_items)) {
-    
-    require_once dirname(__FILE__) . '/includes/less.process.inc';
-    
-    // Attach settings to each item.
-    array_walk($less_items, '_less_attach_settings');
-
-    // Determine output path for each item.
-    array_walk($less_items, '_less_output_path');
-
-    // Check for rebuild each page.
-    if ($less_devel) {
-
-      array_walk($less_items, '_less_check_build');
-    }
-
-    // Compile '.less' files.
-    array_walk($less_items, '_less_process_file');
-
-    // Store cache information.
-    if ($less_devel) {
-
-      array_walk($less_items, '_less_store_cache_info');
-    }
-
-    $styles['#items'] = array_replace($styles['#items'], $less_items);
-  }
+  $theme = \Drupal::service('theme.manager')->getActiveTheme()->getName();
   
-  return $styles;
+  foreach ($html['page']['#attached']['library'] as $library_key => $library) {
+    if ($library == $theme . '/global-styling') {
+      $library = \Drupal::service('library.discovery')->getLibraryByName($theme, 'global-styling');
+      foreach ($library['css'] as $file_key => $file) {
+        if ($config->get(LESS_DEVEL) ?: FALSE) {
+          if (substr($file['data'], -5) == '.less') {
+            
+            $input_file = $file['data'];
+            
+            $output_path_array = array(
+              '@less_output_dir' => LESS_DIRECTORY,
+              // Strip '.css' extension of filenames following the RTL extension pattern.
+              '@input_file_basename' => basename(basename($input_file, '.less'), '.css'),
+              // drupal_json_encode() is used because serialize() throws an error with lambda functions.
+              '@settings_hash' => \Drupal\Component\Utility\Crypt::hashBase64(Drupal\Component\Serialization\Json::encode($less_settings)),
+            );
+            
+            $output_path = new FormattableMarkup('@less_output_dir/@input_file_basename.@settings_hash.css', $output_path_array);
+            
+            $output_data = NULL;
+
+            //kint(\Drupal::service('libraries.manager')->load('less.php'));
+            //$engine = less_get_engine($file['data']);
+            try {
+              
+              /* $engine->setImportDirectories($less_settings['paths']);
+              if ($less_settings[LESS_DEVEL]) {
+                $engine->setSourceMaps($less_settings[LESS_SOURCE_MAPS], DRUPAL_ROOT, base_path());
+              }
+              $engine->modifyVariables($less_settings['variables']);
+              $output_data = $engine->compile();
+              if ($less_settings[LESS_DEVEL]) {
+                _less_cache_dependencies($less_settings['input_file'], $engine->getDependencies());
+              }
+            }
+            catch (Exception $e) {
+              $message_vars = array(
+                '@message' => $e->getMessage(),
+                '%input_file' => $item['less']['input_file'],
+              );
+              watchdog('LESS', 'LESS error: @message, %input_file', $message_vars, WATCHDOG_ERROR);
+              if (user_access(LESS_PERMISSION)) {
+                drupal_set_message(t('LESS error: @message, %input_file', $message_vars), 'error');
+              } */
+            } catch (Exception $e) {
+            }
+            /* if (isset($output_data)) { 
+              // Fix paths for images as .css is in different location.
+              $output_data = _less_rewrite_paths($item['less']['input_file'], $output_data);
+              // Ensure the destination directory exists.
+              if (_less_ensure_directory(dirname($item['less']['output_file']))) {
+                file_unmanaged_save_data($output_data, $item['less']['output_file'], FILE_EXISTS_REPLACE);
+              }
+            } 
+            if (is_file($item['less']['output_file']) && $item['less'][LESS_AUTOPREFIXER]) {
+              if (($lessautoprefixer_library = libraries_load('lessautoprefixer')) && $lessautoprefixer_library['installed']) {
+                try {
+                  LessAutoprefixer::create(drupal_realpath($item['less']['output_file']))->compile();
+                }
+                catch (Exception $e) {
+                  $message_vars = array(
+                    '@message' => $e->getMessage(),
+                    '%input_file' => $item['less']['output_file'],
+                  );
+                  watchdog('LESS', 'Autoprefixer error: @message, %input_file', $message_vars, WATCHDOG_ERROR);
+                  if (user_access(LESS_PERMISSION)) {
+                    drupal_set_message(t('Autoprefixer error: @message, %input_file', $message_vars), 'error');
+                  }
+                }
+              }
+            } */
+          }
+        }
+      };
+    }
+  };
+  
+  return $html;
 }
 
 /**
@@ -279,7 +293,9 @@ function _less_inc() {
   
   if (!isset($loaded)) {
     
-    $less_engine = variable_get('less_engine', 'lessphp');
+    $config = \Drupal::config('less.settings');
+  
+    $less_engine = $config->get('less_engine') ?: 'lessphp';
     
     if (($less_engine_library = libraries_load($less_engine)) && $less_engine_library['installed']) {
       $loaded = $less_engine;
@@ -598,9 +614,9 @@ function _less_is_less_filename($filename) {
 function less_less_engines() {
 
   return array(
-    'less.php' => 'LessEngineLess_php',
-    'lessphp' => 'LessEngineLessphp',
-    'less.js' => 'LessEngineLess_js',
+    'less.php' => 'Drupal\less\Plugin\engines\LessEngineLess_php',
+    'lessphp' => 'Drupal\less\Plugin\engines\LessEngineLessphp',
+    'less.js' => 'Drupal\less\Plugin\engines\LessEngineLess_js',
   );
 }
 
@@ -629,9 +645,9 @@ function less_get_engine($input_file_path) {
 
   if (!empty($engines[$selected_engine])) {
 
-    $class_name = $engines[$selected_engine];
+    $class = $engines[$selected_engine];
 
-    return new $class_name($input_file_path);
+    return new $class($input_file_path);
   }
   else {
 

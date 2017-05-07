@@ -43,6 +43,7 @@ class ChainDefinitionDiscovery implements DefinitionDiscoveryInterface {
     /** @var \Drupal\libraries\ExternalLibrary\Definition\WritableDefinitionDiscoveryInterface[] $discoveries_to_write */
     $discoveries_to_write = [];
     foreach ($this->discoveries as $discovery) {
+      kint($id);
       if ($discovery->hasDefinition($id)) {
         $definition = $discovery->getDefinition($id);
         break;
