@@ -2,7 +2,9 @@
 
 namespace Drupal\less\Plugin\engines;
 
-use Drupal\less\Plugin\engines\LessEngine;
+$less_php = libraries_load('less.php');
+
+module_load_include('php', 'less', $less_php['library path'] . '/' . $less_php['files']['php']);
 
 /**
  * Class \LessEngineLess_php
@@ -25,7 +27,7 @@ class LessEngineLess_php extends LessEngine {
 
     parent::__construct($input_file_path);
 
-    $this->less_php_parser = new Less_Parser();
+    $this->less_php_parser = new \Less_Parser();
   }
 
   /**

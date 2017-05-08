@@ -134,18 +134,18 @@ function _less_pre_render($html) {
             $output_path = new FormattableMarkup('@less_output_dir/@input_file_basename.@settings_hash.css', $output_path_array);
             
             $output_data = NULL;
-
-            //kint(\Drupal::service('libraries.manager')->load('less.php'));
-            //$engine = less_get_engine($file['data']);
+            
             try {
               
-              /* $engine->setImportDirectories($less_settings['paths']);
-              if ($less_settings[LESS_DEVEL]) {
-                $engine->setSourceMaps($less_settings[LESS_SOURCE_MAPS], DRUPAL_ROOT, base_path());
-              }
-              $engine->modifyVariables($less_settings['variables']);
+              $engine = less_get_engine($file['data']);
+              //$engine->setImportDirectories($less_settings['paths']);
+              //if ($less_settings[LESS_DEVEL]) {
+                //$engine->setSourceMaps($less_settings[LESS_SOURCE_MAPS], DRUPAL_ROOT, base_path());
+              //}
+              // $engine->modifyVariables($less_settings['variables']);
               $output_data = $engine->compile();
-              if ($less_settings[LESS_DEVEL]) {
+              //kint($output_data);
+              /*if ($less_settings[LESS_DEVEL]) {
                 _less_cache_dependencies($less_settings['input_file'], $engine->getDependencies());
               }
             }
