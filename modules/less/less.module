@@ -11,6 +11,7 @@
 use Drupal\Core\Asset\AttachedAssetsInterface;
 use Drupal\Component\Render\FormattableMarkup;
 use Drupal\less\Plugin\engines\LessEngineLess_php;
+use Drupal\Core\Cache\CacheBackendInterface;
 
 define('LESS_PERMISSION', 'administer less');
 
@@ -133,42 +134,74 @@ function _less_pre_render($html) {
             
             $output_path = new FormattableMarkup('@less_output_dir/@input_file_basename.@settings_hash.css', $output_path_array);
             
-            $output_data = NULL;
+            $output_path = $output_path->__toString();
             
             try {
               
               $engine = less_get_engine($file['data']);
               //$engine->setImportDirectories($less_settings['paths']);
-              //if ($less_settings[LESS_DEVEL]) {
-                //$engine->setSourceMaps($less_settings[LESS_SOURCE_MAPS], DRUPAL_ROOT, base_path());
-              //}
+              $engine->setSourceMaps($config->get(LESS_SOURCE_MAPS) ?: FALSE, DRUPAL_ROOT, base_path());
               // $engine->modifyVariables($less_settings['variables']);
               $output_data = $engine->compile();
-              //kint($output_data);
-              /*if ($less_settings[LESS_DEVEL]) {
-                _less_cache_dependencies($less_settings['input_file'], $engine->getDependencies());
+              
+              $dependencies = array_merge(array($file['data']), (array) $engine->getDependencies());
+  
+              $watched_files = array();
+              
+              foreach ($dependencies as $dependency) {
+                
+                // Full path on file should enforce uniqueness in associative array.
+                $watched_files[drupal_realpath($dependency)] = filemtime($dependency);
               }
-            }
-            catch (Exception $e) {
+              
+              \Drupal::cache()->set('less:devel:' . \Drupal\Component\Utility\Crypt::hashBase64($file['data']), $watched_files);
+              
+            } catch (Exception $e) {
               $message_vars = array(
                 '@message' => $e->getMessage(),
-                '%input_file' => $item['less']['input_file'],
+                '%input_file' => $file['data'],
               );
-              watchdog('LESS', 'LESS error: @message, %input_file', $message_vars, WATCHDOG_ERROR);
-              if (user_access(LESS_PERMISSION)) {
+
+              \Drupal::logger('LESS')->error(t('LESS error: @message, %input_file', $message_vars));
+
+              if (\Drupal::currentUser()->hasPermission(LESS_PERMISSION)) {
                 drupal_set_message(t('LESS error: @message, %input_file', $message_vars), 'error');
-              } */
-            } catch (Exception $e) {
-            }
-            /* if (isset($output_data)) { 
-              // Fix paths for images as .css is in different location.
-              $output_data = _less_rewrite_paths($item['less']['input_file'], $output_data);
-              // Ensure the destination directory exists.
-              if (_less_ensure_directory(dirname($item['less']['output_file']))) {
-                file_unmanaged_save_data($output_data, $item['less']['output_file'], FILE_EXISTS_REPLACE);
               }
+            }
+            if (isset($output_data)) { 
+            
+              // Fix paths for images as .css is in different location.
+              $output = '';
+  
+              // Build the base URL of this CSS file: start with the full URL.
+              $css_base_url = file_create_url($file['data']);
+             
+              // Move to the parent.
+              $css_base_url = substr($css_base_url, 0, strrpos($css_base_url, '/'));
+              // Simplify to a relative URL if the stylesheet URL starts with the
+              // base URL of the website.
+              
+              global $base_root;
+              
+              if (substr($css_base_url, 0, strlen($base_root)) == $base_root) {
+                $css_base_url = substr($css_base_url, strlen($base_root));
+                                
+              }
+              
+              _less_build_css_path(NULL, $css_base_url . '/');
+              kint($css_base_url);
+              
+              // Anchor all paths in the CSS with its base URL, ignoring external and absolute paths.
+              $output_data .= preg_replace_callback('/url\(\s*[\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\s*\)/i', '_less_build_css_path', $output_data);
+              
+              // Ensure the destination directory exists.
+              if (_less_ensure_directory(dirname($output_path))) {
+                file_unmanaged_save_data($output_data, $output_path, FILE_EXISTS_REPLACE);
+                //kint($file['data']);
+              }
+              
             } 
-            if (is_file($item['less']['output_file']) && $item['less'][LESS_AUTOPREFIXER]) {
+            /* if (is_file($item['less']['output_file']) && $item['less'][LESS_AUTOPREFIXER]) {
               if (($lessautoprefixer_library = libraries_load('lessautoprefixer')) && $lessautoprefixer_library['installed']) {
                 try {
                   LessAutoprefixer::create(drupal_realpath($item['less']['output_file']))->compile();
@@ -192,6 +225,23 @@ function _less_pre_render($html) {
   };
   
   return $html;
+}
+
+function _less_build_css_path($matches, $base = NULL) {
+  $_base = &drupal_static(__FUNCTION__);
+  // Store base path for preg_replace_callback.
+  if (isset($base)) {
+    $_base = $base;
+  }
+
+  // Prefix with base and remove '../' segments where possible.
+  $path = $_base . $matches[1];
+  $last = '';
+  while ($path != $last) {
+    $last = $path;
+    $path = preg_replace('`(^|/)(?!\.\./)([^/]+)/\.\./`', '$1', $path);
+  }
+  return 'url(' . $path . ')';
 }
 
 /**
@@ -545,19 +595,21 @@ function _less_ensure_directory($directory_path) {
   if (!$is_dir) {
     
     $lock_id = 'less_directory_' . md5($directory_path);
+   
+    $lock = \Drupal::lock();
     
     // Attempt to create directory only 3 times, else delay is too long.
     for ($i = 0; $i < 3; $i++) {
       
-      if (lock_acquire($lock_id) && $is_dir = file_prepare_directory($directory_path, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+      if ($lock->acquire($lock_id) && $is_dir = file_prepare_directory($directory_path, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
         // Creation was successful, cancel the 'for' loop;
         break;
       }
       
-      lock_wait($lock_id, 1);
+      $lock->wait($lock_id, 1);
     }
     
-    lock_release($lock_id);
+    $lock->release($lock_id);
     
     if (!$is_dir) {
       // There is a problem with the directory.
@@ -565,9 +617,9 @@ function _less_ensure_directory($directory_path) {
         '%dir' => $directory_path,
       );
       
-      watchdog('LESS', 'LESS could not create a directory in %dir', $message_vars, WATCHDOG_ERROR);
+      \Drupal::logger('LESS')->error(t('LESS', 'LESS could not create a directory in %dir', $message_vars));
       
-      if (user_access(LESS_PERMISSION)) {
+      if (\Drupal::currentUser()->hasPermission(LESS_PERMISSION)) {
         drupal_set_message(t('LESS could not create a directory in %dir', $message_vars), 'error', FALSE);
       }
       
