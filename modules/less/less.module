@@ -58,7 +58,14 @@ function less_hook_info() {
 }
 
 function less_element_info_alter(array &$types) {
+  
+  $config = \Drupal::config('less.settings');
+  
   $types['html']['#pre_render'][] = '_less_pre_render';
+  
+  if ($config->get(LESS_DEVEL) ?: FALSE) {
+    $types['html']['#pre_render'][] = '_less_attach_src';
+  }
 }
 
 /**
@@ -72,26 +79,17 @@ function less_element_info_alter(array &$types) {
  * 
  * @see drupal_pre_render_styles()
  */
-function _less_attach_src($styles) {
+function _less_attach_src($html) {
   
-  foreach (element_children($styles) as $key) {
-    
-    // If its a <link />, then most likely its a compiled .less file.
-    if ($styles[$key]['#tag'] == 'link') {
-      
-      // Hashes are generated based on the URL without the query portion.
-      $file_url_parts = drupal_parse_url($styles[$key]['#attributes']['href']);
-      
-      // If we have a match, it means it is a compiled .less file.
-      if ($cache = cache_get('less:watch:' . drupal_hash_base64($file_url_parts['path']))) {
-        
-        // Some inspectors allow 'src' attribute to open from a click.
-        $styles[$key]['#attributes']['src'] = url($cache->data['less']['input_file']);
+  foreach ($html['page']['#attached']['html_head'] as $key => $element) {
+    if ($element[1] == 'less' && $element[0]['#type'] = 'html_tag' && $element[0]['#tag'] == 'link') {
+      if ($cache = \Drupal::cache()->get('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($element[0]['#attributes']['href']))) {
+        $html['page']['#attached']['html_head'][$key][0]['#attributes']['href'] = $cache->data;
       }
     }
   }
   
-  return $styles;
+  return $html;
 }
 
 /**
@@ -175,6 +173,7 @@ function _less_pre_render($html) {
   
               // Build the base URL of this CSS file: start with the full URL.
               $css_base_url = file_create_url($file['data']);
+              
              
               // Move to the parent.
               $css_base_url = substr($css_base_url, 0, strrpos($css_base_url, '/'));
@@ -184,12 +183,10 @@ function _less_pre_render($html) {
               global $base_root;
               
               if (substr($css_base_url, 0, strlen($base_root)) == $base_root) {
-                $css_base_url = substr($css_base_url, strlen($base_root));
-                                
+                $css_base_url = substr($css_base_url, strlen($base_root));             
               }
               
               _less_build_css_path(NULL, $css_base_url . '/');
-              kint($css_base_url);
               
               // Anchor all paths in the CSS with its base URL, ignoring external and absolute paths.
               $output_data .= preg_replace_callback('/url\(\s*[\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\s*\)/i', '_less_build_css_path', $output_data);
@@ -197,10 +194,41 @@ function _less_pre_render($html) {
               // Ensure the destination directory exists.
               if (_less_ensure_directory(dirname($output_path))) {
                 file_unmanaged_save_data($output_data, $output_path, FILE_EXISTS_REPLACE);
-                //kint($file['data']);
               }
               
-            } 
+            }
+            
+            if (substr($file['data'], 0, strlen($base_root)) == $base_root) {
+              $file['data'] = substr($file['data'], strlen($base_root));              
+            }
+            
+            $url = file_create_url($output_path);
+            
+            if ($config->get(LESS_WATCH) ?: FALSE) {
+              \Drupal::cache()->set('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($url), $url);
+              
+              kint(\Drupal::cache()->get('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($url)));
+            }
+            
+            $html['page']['#attached']['html_head'][] = [
+              // The data.
+              [
+                '#type' => 'html_tag',
+                // The HTML tag to add, in this case a  tag.
+                '#tag' => 'link',
+                // The value of the HTML tag, here we want to end up with
+                // alert("Hello world!");.
+                '#attributes' => array(
+                  'type' => 'text/css', 
+                  'rel' => 'stylesheet', 
+                  'href' => $url, 
+                  'media' => 'all', 
+                  'src' => $file['data']
+                ),
+              ],
+              // A key, to make it possible to recognize this HTML  element when altering.
+              'less',
+            ];
             /* if (is_file($item['less']['output_file']) && $item['less'][LESS_AUTOPREFIXER]) {
               if (($lessautoprefixer_library = libraries_load('lessautoprefixer')) && $lessautoprefixer_library['installed']) {
                 try {

@@ -5,3 +5,10 @@ less.settings:
     _form: '\Drupal\less\Form\LessAdminForm'
   requirements:
     _permission: 'LESS_PERMISSION'
+less.ajax:
+  path: '/ajax/less/watch'
+  defaults:
+    _title: 'LESS watch callback'
+    _controller: '\Drupal\less\Controller\LessWatch::_less_watch'
+  requirements:
+    _access: 'TRUE'
