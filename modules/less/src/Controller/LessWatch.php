@@ -4,7 +4,9 @@ namespace Drupal\less\Controller;
 
 class LessWatch {
   
-  public function _less_watch() {
+  public function _less_watch($data) {
+    
+    kint($data);
     
     global $theme;
     

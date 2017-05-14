@@ -134,6 +134,8 @@ function _less_pre_render($html) {
             
             $output_path = $output_path->__toString();
             
+            //kint( $output_path);
+            
             try {
               
               $engine = less_get_engine($file['data']);
@@ -207,7 +209,7 @@ function _less_pre_render($html) {
             if ($config->get(LESS_WATCH) ?: FALSE) {
               \Drupal::cache()->set('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($url), $url);
               
-              kint(\Drupal::cache()->get('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($url)));
+              //kint(\Drupal::cache()->get('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($url)));
             }
             
             $html['page']['#attached']['html_head'][] = [
