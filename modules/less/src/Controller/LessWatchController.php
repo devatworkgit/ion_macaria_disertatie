@@ -3,6 +3,7 @@
 namespace Drupal\less\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
+use Drupal\Component\Utility\UrlHelper;
 
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -21,7 +22,7 @@ class LessWatchController extends ControllerBase {
       $request->request->replace( is_array( $data ) ? $data : [] );
     }
     
-    $theme = \Drupal::service('theme.manager')->getActiveTheme()->getName();
+    $theme = \Drupal::config('system.theme')->get('default');
     
     $changed_files = array();
     
@@ -32,10 +33,11 @@ class LessWatchController extends ControllerBase {
       
       foreach ($files as $file) {
         
-        //$file_url_parts = drupal_parse_url($file);
+        $file_url_parts = UrlHelper::parse($file);
         
-        if ($cache = \Drupal::cache()->get('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($file['data']))) {
-          $cached_data = $cache->data;
+        if ($cache = \Drupal::cache()->get('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($file_url_parts['path']))) {
+          
+          $cached_data = $cache->data; 
           
           $input_file = $cached_data['less']['input_file'];
           
@@ -51,22 +53,19 @@ class LessWatchController extends ControllerBase {
             ),
           );
           
-          /* $styles = _less_pre_render($styles);
+          //$styles = _less_pre_render($styles);
           
           if (filemtime($styles['#items'][$input_file]['data']) > $current_mtime) {
             $changed_files[] = array(
               'old_file' => $file_url_parts['path'],
               'new_file' => file_create_url($styles['#items'][$input_file]['data']),
             );
-          } */
+          }
         }
       }
     }
-    
-    $response['data'] = $files;
-    $response['method'] = 'POST';
 
-    return new JsonResponse( $response );
+    return new JsonResponse($changed_files);
   }
 
   /* public function _less_watch() {
