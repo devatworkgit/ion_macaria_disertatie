@@ -41,13 +41,15 @@
        
             $.ajax({
               type: 'POST',
-              url: settings.basePath + 'ajax/less/watch',
+              url: settings.path.baseUrl + 'ajax/less/watch.json',
               data: {
                 less_files: watched_files
               },
 
               // On success, reset failed request counter and update style links.
               success: function ( response ) {
+                
+                console.log(response);
                 
                 self.failed_requests = 0;
                 

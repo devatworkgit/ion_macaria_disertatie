@@ -6,9 +6,9 @@ less.settings:
   requirements:
     _permission: 'LESS_PERMISSION'
 less.ajax:
-  path: '/ajax/less/watch/{data}'
+  path: 'ajax/less/watch.json'
   defaults:
-    _title: 'LESS watch callback'
-    _controller: '\Drupal\less\Controller\LessWatch::_less_watch'
+    _controller: '\Drupal\less\Controller\LessWatchController::_less_watch'
+  methods:  [POST]
   requirements:
     _access: 'TRUE'
