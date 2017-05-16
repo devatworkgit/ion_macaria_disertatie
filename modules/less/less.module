@@ -257,14 +257,17 @@ function _less_pre_render($html) {
                 '#attributes' => array(
                   'type' => 'text/css', 
                   'rel' => 'stylesheet', 
+                  'uri' => $file['less']['output_file'], 
                   'href' => $url, 
                   'media' => 'all', 
-                  'src' => $file['data']
+                  'src' => $file['less']['input_file']
                 ),
               ],
               // A key, to make it possible to recognize this HTML  element when altering.
-              'less',
+              'less_'.$file_key,
             ];
+            
+            //kint($html);
             /* if (is_file($item['less']['output_file']) && $item['less'][LESS_AUTOPREFIXER]) {
               if (($lessautoprefixer_library = libraries_load('lessautoprefixer')) && $lessautoprefixer_library['installed']) {
                 try {
