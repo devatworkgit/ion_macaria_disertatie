@@ -49,13 +49,13 @@ class LessWatchController extends ControllerBase {
           
           $html['page']['#attached']['library'][] = $theme . '/global-styling';
           
-          //$html = _less_pre_render($html);
+          $html = _less_pre_render($html);
           
           foreach ($html['page']['#attached']['html_head'] as $element) {
             if (substr($element[1], 0, 4) == 'less') {
               if (filemtime($element[0]['#attributes']['uri']) > $current_mtime) {
                 $changed_files[] = array(
-                  'old_file' => $file_url_parts['path'],
+                  'old_file' => $cached_data,
                   'new_file' => file_create_url($element[0]['#attributes']['uri']),
                 );
               }
