@@ -48,6 +48,7 @@ class LessWatchController extends ControllerBase {
           $theme = $cached_data['less']['theme'];
           
           $html['page']['#attached']['library'][] = $theme . '/global-styling';
+          $html['less'][$cached_data['less']['input_file']]['less']['output_file'] = $cached_data['less']['output_file'];
           
           $html = _less_pre_render($html);
           
@@ -55,7 +56,7 @@ class LessWatchController extends ControllerBase {
             if (substr($element[1], 0, 4) == 'less') {
               if (filemtime($element[0]['#attributes']['uri']) > $current_mtime) {
                 $changed_files[] = array(
-                  'old_file' => $cached_data,
+                  'old_file' => $file_url_parts['path'],
                   'new_file' => file_create_url($element[0]['#attributes']['uri']),
                 );
               }

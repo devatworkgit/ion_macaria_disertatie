@@ -49,8 +49,6 @@
               // On success, reset failed request counter and update style links.
               success: function ( response ) {
                 
-                console.log(response);
-                
                 self.failed_requests = 0;
                 
                 $.each(response, function (index, value) {

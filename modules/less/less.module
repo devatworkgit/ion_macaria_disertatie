@@ -115,205 +115,207 @@ function _less_pre_render($html) {
   
   $theme = \Drupal::config('system.theme')->get('default');
   
-  foreach ($html['page']['#attached']['library'] as $library_key => $library) {
-    if ($library == $theme . '/global-styling') {
-      $library = \Drupal::service('library.discovery')->getLibraryByName($theme, 'global-styling');
-      foreach ($library['css'] as $file_key => $file) {
-        if ($config->get(LESS_DEVEL) ?: FALSE) {
-          if (substr($file['data'], -5) == '.less') {
-            
-            $defaults = array(
-              'less' => less_get_settings(), // Bare defaults for LESS.
-            );
+  $library = \Drupal::service('library.discovery')->getLibraryByName($theme, 'global-styling');
+  
+  if ($library) {
+    foreach ($library['css'] as $file_key => $file) {
+      if ($config->get(LESS_DEVEL) ?: FALSE) {
+        if (substr($file['data'], -5) == '.less') {
+          
+          $defaults = array(
+            'less' => less_get_settings(), // Bare defaults for LESS.
+          );
 
-            // These items must be reset for consistent operation.
-            $nullify = array(
-              'less' => array(
-                'output_file' => NULL,
-                'build_required' => NULL,
-              ),
-            );
+          // These items must be reset for consistent operation.
+          $nullify = array(
+            'less' => array(
+              'output_file' => NULL,
+              'build_required' => NULL,
+            ),
+          );
+          
+          // Merge in any info from $item.
+          $file = array_replace_recursive($defaults, $file, $nullify);
+          
+          $file['less']['input_file'] = $file['data'];
+          
+          $less_settings = less_get_settings(_less_file_owner($file['less']['input_file']));
+          
+          // array_replace_recursive() works on keys, flip to not use numeric keys.
+          $less_settings['paths'] = array_flip($less_settings['paths']);
+          $file['less']['paths'] = array_flip($item['less']['paths']);
+          
+          // Merge defaults with any per file settings.
+          $file['less'] = array_replace_recursive($less_settings, $file['less']);
+          
+          // First array_flips before merge removed duplicates, so just flip back.
+          $file['less']['paths'] = array_flip($file['less']['paths']);
+          
+          $less_settings = $file['less'];
+          
+          $input_file = $file['less']['input_file'];
+          
+          $build_required = FALSE;
+          
+          if ($less_file_cache = \Drupal::cache()->get('less:devel:' . \Drupal\Component\Utility\Crypt::hashBase64($input_file))) {
             
-            // Merge in any info from $item.
-            $file = array_replace_recursive($defaults, $file, $nullify);
-            
-            $file['less']['input_file'] = $file['data'];
-            
-            $less_settings = less_get_settings(_less_file_owner($file['less']['input_file']));
-            
-            // array_replace_recursive() works on keys, flip to not use numeric keys.
-            $less_settings['paths'] = array_flip($less_settings['paths']);
-            $file['less']['paths'] = array_flip($item['less']['paths']);
-            
-            // Merge defaults with any per file settings.
-            $file['less'] = array_replace_recursive($less_settings, $file['less']);
-            
-            // First array_flips before merge removed duplicates, so just flip back.
-            $file['less']['paths'] = array_flip($file['less']['paths']);
-            
-            $less_settings = $file['less'];
-            
-            $input_file = $file['less']['input_file'];
-            
-            $build_required = FALSE;
-            
-            if ($less_file_cache = \Drupal::cache()->get('less:devel:' . \Drupal\Component\Utility\Crypt::hashBase64($input_file))) {
+            // Iterate over each file and check if there are any changes.
+            foreach ($less_file_cache->data as $filepath => $filemtime) {
               
-              // Iterate over each file and check if there are any changes.
-              foreach ($less_file_cache->data as $filepath => $filemtime) {
-                
-                // Only rebuild if there has been a change to a file.
-                if (is_file($filepath) && filemtime($filepath) > $filemtime) {
-                  $build_required = TRUE;
-                  break;
-                }
+              // Only rebuild if there has been a change to a file.
+              if (is_file($filepath) && filemtime($filepath) > $filemtime) {
+                $build_required = TRUE;
+                break;
               }
             }
-            else {
+          }
+          else {
+            
+            // No cache data, force a rebuild for later comparison.
+            $build_required = TRUE;
+          }
+          
+          $file['less']['build_required'] = $build_required;
+          
+          if (!is_file($html['less'][$file['less']['input_file']]['less']['output_file']) || $file['less']['build_required']) {
+          
+            $output_path_array = array(
+              '@less_output_dir' => LESS_DIRECTORY,
+              // Strip '.css' extension of filenames following the RTL extension pattern.
+              '@input_file_basename' => basename(basename($input_file, '.less'), '.css'),
+              // drupal_json_encode() is used because serialize() throws an error with lambda functions.
+              '@settings_hash' => \Drupal\Component\Utility\Crypt::hashBase64(Drupal\Component\Serialization\Json::encode($less_settings)),
+            );
+            
+            $output_path = new FormattableMarkup('@less_output_dir/@input_file_basename.@settings_hash.css', $output_path_array);
+            
+            $output_path = $output_path->__toString();
+            
+            $file['less']['output_file'] = $output_path;
+            
+            try {
               
-              // No cache data, force a rebuild for later comparison.
-              $build_required = TRUE;
+              $engine = less_get_engine($less_settings['input_file']);
+              //$engine->setImportDirectories($less_settings['paths']);
+              $engine->setSourceMaps($config->get(LESS_SOURCE_MAPS) ?: FALSE, DRUPAL_ROOT, base_path());
+              // $engine->modifyVariables($less_settings['variables']);
+              $output_data = $engine->compile();
+              
+              $dependencies = array_merge(array($less_settings['input_file']), (array) $engine->getDependencies());
+
+              $watched_files = array();
+              
+              foreach ($dependencies as $dependency) {
+                
+                // Full path on file should enforce uniqueness in associative array.
+                $watched_files[drupal_realpath($dependency)] = filemtime($dependency);
+              }
+              
+              \Drupal::cache()->set('less:devel:' . \Drupal\Component\Utility\Crypt::hashBase64($less_settings['input_file']), $watched_files);
+              
+            } catch (Exception $e) {
+              $message_vars = array(
+                '@message' => $e->getMessage(),
+                '%input_file' => $less_settings['input_file'],
+              );
+
+              \Drupal::logger('LESS')->error(t('LESS error: @message, %input_file', $message_vars));
+
+              if (\Drupal::currentUser()->hasPermission(LESS_PERMISSION)) {
+                drupal_set_message(t('LESS error: @message, %input_file', $message_vars), 'error');
+              }
             }
             
-            $file['less']['build_required'] = $build_required;
+            global $base_root;
             
-            if ($file['less']['build_required']) {
+            if (isset($output_data)) { 
             
-              $output_path_array = array(
-                '@less_output_dir' => LESS_DIRECTORY,
-                // Strip '.css' extension of filenames following the RTL extension pattern.
-                '@input_file_basename' => basename(basename($input_file, '.less'), '.css'),
-                // drupal_json_encode() is used because serialize() throws an error with lambda functions.
-                '@settings_hash' => \Drupal\Component\Utility\Crypt::hashBase64(Drupal\Component\Serialization\Json::encode($less_settings)),
-              );
+              // Fix paths for images as .css is in different location.
+              $output = '';
+
+              // Build the base URL of this CSS file: start with the full URL.
+              $css_base_url = file_create_url($file['less']['input_file']);
               
-              $output_path = new FormattableMarkup('@less_output_dir/@input_file_basename.@settings_hash.css', $output_path_array);
+             
+              // Move to the parent.
+              $css_base_url = substr($css_base_url, 0, strrpos($css_base_url, '/'));
+              // Simplify to a relative URL if the stylesheet URL starts with the
+              // base URL of the website.
               
-              $output_path = $output_path->__toString();
+              if (substr($css_base_url, 0, strlen($base_root)) == $base_root) {
+                $css_base_url = substr($css_base_url, strlen($base_root));             
+              }
               
-              $file['less']['output_file'] = $output_path;
+              _less_build_css_path(NULL, $css_base_url . '/');
               
-              try {
-                
-                $engine = less_get_engine($less_settings['input_file']);
-                //$engine->setImportDirectories($less_settings['paths']);
-                $engine->setSourceMaps($config->get(LESS_SOURCE_MAPS) ?: FALSE, DRUPAL_ROOT, base_path());
-                // $engine->modifyVariables($less_settings['variables']);
-                $output_data = $engine->compile();
-                
-                $dependencies = array_merge(array($less_settings['input_file']), (array) $engine->getDependencies());
+              // Anchor all paths in the CSS with its base URL, ignoring external and absolute paths.
+              $output_data .= preg_replace_callback('/url\(\s*[\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\s*\)/i', '_less_build_css_path', $output_data);
+              
+              // Ensure the destination directory exists.
+              if (_less_ensure_directory(dirname($file['less']['output_file']))) {
+                file_unmanaged_save_data($output_data, $file['less']['output_file'], FILE_EXISTS_REPLACE);
+              }
+              
+            }
+            
+            $less_watch_cache = $file;
     
-                $watched_files = array();
-                
-                foreach ($dependencies as $dependency) {
-                  
-                  // Full path on file should enforce uniqueness in associative array.
-                  $watched_files[drupal_realpath($dependency)] = filemtime($dependency);
-                }
-                
-                \Drupal::cache()->set('less:devel:' . \Drupal\Component\Utility\Crypt::hashBase64($less_settings['input_file']), $watched_files);
-                
-              } catch (Exception $e) {
+            $less_watch_cache['data'] = $file['less']['input_file'];
+            
+            $url = file_create_url($file['less']['output_file']);
+            
+            
+            if ($config->get(LESS_WATCH) ?: FALSE) {
+              \Drupal::cache()->set('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($url), $less_watch_cache);
+            }
+            
+            $html['less'][$file['less']['input_file']] = $file;
+          }
+          
+          if (is_file($file['less']['output_file'])) {  
+            $html['page']['#attached']['html_head'][] = [
+              // The data.
+              [
+                '#type' => 'html_tag',
+                // The HTML tag to add, in this case a  tag.
+                '#tag' => 'link',
+                // The value of the HTML tag, here we want to end up with
+                // alert("Hello world!");.
+                '#attributes' => array(
+                  'type' => 'text/css', 
+                  'rel' => 'stylesheet', 
+                  'uri' => $file['less']['output_file'], 
+                  'href' => file_create_url($file['less']['output_file']), 
+                  'media' => 'all', 
+                  'src' => $file['less']['input_file']
+                ),
+              ],
+              // A key, to make it possible to recognize this HTML  element when altering.
+              'less_' . $file_key,
+            ];
+          }
+          //kint($html);
+          /* if (is_file($item['less']['output_file']) && $item['less'][LESS_AUTOPREFIXER]) {
+            if (($lessautoprefixer_library = libraries_load('lessautoprefixer')) && $lessautoprefixer_library['installed']) {
+              try {
+                LessAutoprefixer::create(drupal_realpath($item['less']['output_file']))->compile();
+              }
+              catch (Exception $e) {
                 $message_vars = array(
                   '@message' => $e->getMessage(),
-                  '%input_file' => $less_settings['input_file'],
+                  '%input_file' => $item['less']['output_file'],
                 );
-
-                \Drupal::logger('LESS')->error(t('LESS error: @message, %input_file', $message_vars));
-
-                if (\Drupal::currentUser()->hasPermission(LESS_PERMISSION)) {
-                  drupal_set_message(t('LESS error: @message, %input_file', $message_vars), 'error');
+                watchdog('LESS', 'Autoprefixer error: @message, %input_file', $message_vars, WATCHDOG_ERROR);
+                if (user_access(LESS_PERMISSION)) {
+                  drupal_set_message(t('Autoprefixer error: @message, %input_file', $message_vars), 'error');
                 }
-              }
-              
-              global $base_root;
-              
-              if (isset($output_data)) { 
-              
-                // Fix paths for images as .css is in different location.
-                $output = '';
-    
-                // Build the base URL of this CSS file: start with the full URL.
-                $css_base_url = file_create_url($file['less']['input_file']);
-                
-               
-                // Move to the parent.
-                $css_base_url = substr($css_base_url, 0, strrpos($css_base_url, '/'));
-                // Simplify to a relative URL if the stylesheet URL starts with the
-                // base URL of the website.
-                
-                if (substr($css_base_url, 0, strlen($base_root)) == $base_root) {
-                  $css_base_url = substr($css_base_url, strlen($base_root));             
-                }
-                
-                _less_build_css_path(NULL, $css_base_url . '/');
-                
-                // Anchor all paths in the CSS with its base URL, ignoring external and absolute paths.
-                $output_data .= preg_replace_callback('/url\(\s*[\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\s*\)/i', '_less_build_css_path', $output_data);
-                
-                // Ensure the destination directory exists.
-                if (_less_ensure_directory(dirname($file['less']['output_file']))) {
-                  file_unmanaged_save_data($output_data, $file['less']['output_file'], FILE_EXISTS_REPLACE);
-                }
-                
-              }
-              
-              $less_watch_cache = $file;
-      
-              $less_watch_cache['data'] = $file['less']['input_file'];
-              
-              $url = file_create_url($file['less']['output_file']);
-              
-              if ($config->get(LESS_WATCH) ?: FALSE) {
-                \Drupal::cache()->set('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($url), $less_watch_cache);
               }
             }
-            
-            if (is_file($file['less']['output_file'])) {  
-              $html['page']['#attached']['html_head'][] = [
-                // The data.
-                [
-                  '#type' => 'html_tag',
-                  // The HTML tag to add, in this case a  tag.
-                  '#tag' => 'link',
-                  // The value of the HTML tag, here we want to end up with
-                  // alert("Hello world!");.
-                  '#attributes' => array(
-                    'type' => 'text/css', 
-                    'rel' => 'stylesheet', 
-                    'uri' => $file['less']['output_file'], 
-                    'href' => file_create_url($file['less']['output_file']), 
-                    'media' => 'all', 
-                    'src' => $file['less']['input_file']
-                  ),
-                ],
-                // A key, to make it possible to recognize this HTML  element when altering.
-                'less_' . $file_key,
-              ];
-            }
-            //kint($html);
-            /* if (is_file($item['less']['output_file']) && $item['less'][LESS_AUTOPREFIXER]) {
-              if (($lessautoprefixer_library = libraries_load('lessautoprefixer')) && $lessautoprefixer_library['installed']) {
-                try {
-                  LessAutoprefixer::create(drupal_realpath($item['less']['output_file']))->compile();
-                }
-                catch (Exception $e) {
-                  $message_vars = array(
-                    '@message' => $e->getMessage(),
-                    '%input_file' => $item['less']['output_file'],
-                  );
-                  watchdog('LESS', 'Autoprefixer error: @message, %input_file', $message_vars, WATCHDOG_ERROR);
-                  if (user_access(LESS_PERMISSION)) {
-                    drupal_set_message(t('Autoprefixer error: @message, %input_file', $message_vars), 'error');
-                  }
-                }
-              }
-            } */
-          }
+          } */
         }
-      };
-    }
-  };
+      }
+    };
+  }
   
   return $html;
 }
