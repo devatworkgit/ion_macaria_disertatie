@@ -52,15 +52,11 @@ class LessWatchController extends ControllerBase {
           
           $html = _less_pre_render($html);
           
-          foreach ($html['page']['#attached']['html_head'] as $element) {
-            if (substr($element[1], 0, 4) == 'less') {
-              if (filemtime($element[0]['#attributes']['uri']) > $current_mtime) {
-                $changed_files[] = array(
-                  'old_file' => $file_url_parts['path'],
-                  'new_file' => file_create_url($element[0]['#attributes']['uri']),
-                );
-              }
-            }
+          if (filemtime($html['less'][$cached_data['less']['input_file']]['less']['output_file']) > $current_mtime) {
+            $changed_files[] = array(
+              'old_file' => $file_url_parts['path'],
+              'new_file' => file_create_url($html['less'][$cached_data['less']['input_file']]['less']['output_file']),
+            );
           }
         }
       }
