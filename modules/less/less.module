@@ -112,7 +112,7 @@ function _less_pre_render($html) {
   
   $theme = \Drupal::config('system.theme')->get('default');
   
-  $library = \Drupal::service('library.discovery')->getLibraryByName($theme, 'global-styling');
+  $library = \Drupal::service('library.discovery')->getLibraryByName($theme, 'less');
   
   if ($library) {
     foreach ($library['css'] as $file_key => $file) {
@@ -277,7 +277,7 @@ function _less_pre_render($html) {
                   '@message' => $e->getMessage(),
                   '%input_file' => $file['less']['output_file'],
                 );
-                \Drupal::logger('LESS')->error(t('LESS', 'Autoprefixer error: @message, %input_file', $message_vars);
+                \Drupal::logger('LESS')->error(t('LESS', 'Autoprefixer error: @message, %input_file', $message_vars));
                 if (\Drupal::currentUser()->hasPermission(LESS_PERMISSION)) {
                   drupal_set_message(t('Autoprefixer error: @message, %input_file', $message_vars), 'error');
                 }

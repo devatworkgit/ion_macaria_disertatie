@@ -47,7 +47,7 @@ class LessWatchController extends ControllerBase {
           
           $theme = $cached_data['less']['theme'];
           
-          $html['page']['#attached']['library'][] = $theme . '/global-styling';
+          $html['page']['#attached']['library'][] = $theme . '/less';
           $html['less'][$cached_data['less']['input_file']]['less']['output_file'] = $cached_data['less']['output_file'];
           
           $html = _less_pre_render($html);
