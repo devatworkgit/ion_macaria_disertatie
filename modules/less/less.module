@@ -267,6 +267,24 @@ function _less_pre_render($html) {
             \Drupal::cache()->set('less:watch:' . \Drupal\Component\Utility\Crypt::hashBase64($url), $less_watch_cache);
           }
           
+          if (is_file($file['less']['output_file']) && $file['less'][LESS_AUTOPREFIXER]) {
+            if (($lessautoprefixer_library = libraries_load('lessautoprefixer')) && $lessautoprefixer_library['installed']) {
+              try {
+                \Drupal\less\Classes\LessAutoprefixer::create(drupal_realpath($item['less']['output_file']))->compile();
+              }
+              catch (Exception $e) {
+                $message_vars = array(
+                  '@message' => $e->getMessage(),
+                  '%input_file' => $file['less']['output_file'],
+                );
+                \Drupal::logger('LESS')->error(t('LESS', 'Autoprefixer error: @message, %input_file', $message_vars);
+                if (\Drupal::currentUser()->hasPermission(LESS_PERMISSION)) {
+                  drupal_set_message(t('Autoprefixer error: @message, %input_file', $message_vars), 'error');
+                }
+              }
+            }
+          }
+          
           $html['less'][$file['less']['input_file']] = $file;
         }
         
@@ -291,24 +309,6 @@ function _less_pre_render($html) {
             'less_' . $file_key,
           ];
         }
-        //kint($html);
-        /* if (is_file($item['less']['output_file']) && $item['less'][LESS_AUTOPREFIXER]) {
-          if (($lessautoprefixer_library = libraries_load('lessautoprefixer')) && $lessautoprefixer_library['installed']) {
-            try {
-              LessAutoprefixer::create(drupal_realpath($item['less']['output_file']))->compile();
-            }
-            catch (Exception $e) {
-              $message_vars = array(
-                '@message' => $e->getMessage(),
-                '%input_file' => $item['less']['output_file'],
-              );
-              watchdog('LESS', 'Autoprefixer error: @message, %input_file', $message_vars, WATCHDOG_ERROR);
-              if (user_access(LESS_PERMISSION)) {
-                drupal_set_message(t('Autoprefixer error: @message, %input_file', $message_vars), 'error');
-              }
-            }
-          }
-        } */
       }
     };
   }
