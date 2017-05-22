@@ -2,8 +2,8 @@
 
 namespace Drupal\less\Plugin\engines;
 
-use Drupal\less\Plugin\engines\LessEngine;
-use Drupal\Library\less.php;
+use Drupal\less\Classes\Lessjs;
+
 /**
  * Class \LessEngineLess_js
  */

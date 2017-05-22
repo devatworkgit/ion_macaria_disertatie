@@ -1,5 +1,9 @@
 <?php
 
+namespace Drupal\less\Classes;
+
+use \Exception;
+
 /**
  * @file
  * Contains 'lessjs' class; an abstraction layer for command line less.js.
@@ -274,7 +278,7 @@ class Lessjs {
         fclose($pipes[2]);
 
         if (!empty($error)) {
-          throw new Exception($error);
+          throw new \Exception($error);
         }
 
         proc_close($process);

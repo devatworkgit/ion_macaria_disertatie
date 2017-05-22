@@ -1,5 +1,7 @@
 <?php
 
+//use Drupal\less\Classes\Lessjs;
+
 /**
  * @file
  *   Contains Libraries API integration.
@@ -63,8 +65,8 @@ function less_libraries_info() {
     'name' => 'less.js',
     'vendor url' => 'http://lesscss.org/', 
     'download url' => 'http://lesscss.org/usage/#using-less-environments',
-    'library path' => drupal_get_path('module', 'less') . '/classes',
-    'version callback' => array('Lessjs', 'version'),
+    'library path' => drupal_get_path('module', 'less') . '/src/Classes',
+    'version callback' => array('Drupal\less\Classes\Lessjs', 'version'),
     /**
      * Integer indexed 'version arguments' array causes 'version callback' to be
      * run through call_user_func_array().
@@ -76,7 +78,7 @@ function less_libraries_info() {
     ),
     'files' => array(
       'php' => array(
-        'class.lessjs.inc',
+        "Lessjs.php",
       ),
     ),
     'versions' => array(
@@ -91,8 +93,8 @@ function less_libraries_info() {
     'name' => 'Autoprefixer',
     'vendor url' => 'https://github.com/ai/autoprefixer', 
     'download url' => 'https://github.com/ai/autoprefixer/releases',
-    'library path' => drupal_get_path('module', 'less') . '/classes',
-    'version callback' => array('LessAutoprefixer', 'version'),
+    'library path' => drupal_get_path('module', 'less') . '/src/Classes',
+    'version callback' => array('Drupal\less\Classes\LessAutoprefixer', 'version'),
     /**
      * Integer indexed 'version arguments' array causes 'version callback' to be
      * run through call_user_func_array().
@@ -104,7 +106,7 @@ function less_libraries_info() {
     ),
     'files' => array(
       'php' => array(
-        'class.lessautoprefixer.inc',
+        'LessAutoprefixer.php',
       ),
     ),
     'versions' => array(

@@ -10,7 +10,6 @@
  
 use Drupal\Core\Asset\AttachedAssetsInterface;
 use Drupal\Component\Render\FormattableMarkup;
-use Drupal\less\Plugin\engines\LessEngineLess_php;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Component\Utility\UrlHelper;
 
@@ -25,8 +24,6 @@ define('LESS_SOURCE_MAPS', 'less_source_maps');
 define('LESS_DIRECTORY', 'public://less');
 
 require_once dirname(__FILE__) . '/includes/less.libraries.inc';
-require_once dirname(__FILE__) . '/includes/less.wysiwyg.inc';
-require_once dirname(__FILE__) . '/includes/less.theme.inc';
 
 /**
  * Implements hook_hook_info().
