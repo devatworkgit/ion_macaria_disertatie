@@ -155,7 +155,7 @@ class LessAdminForm extends ConfigFormBase {
    */
   public function _flush_less(array $form, FormStateInterface $form_state) {
     less_flush_caches();
-    drupal_set_message(t('LESS files cache cleared.'), 'status');
+    drupal_set_message(t('LESS files and cache cleared.'), 'status');
     drupal_flush_all_caches();
   }
   
