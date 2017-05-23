@@ -36,12 +36,12 @@ class LessAdminForm extends ConfigFormBase {
     
     $form['less_flush'] = array(
       '#type' => 'fieldset',
-      '#title' => $this->t('Click this button to flag all LESS files for regeneration.'),
+      '#title' => $this->t('Click this button to flag all LESS files and cache for regeneration.'),
     );
     
     $form['less_flush']['flush'] = array(
       '#type' => 'submit',
-      '#value' => t('Flush LESS files'),
+      '#value' => t('Flush LESS files and cache'),
       '#submit' => array('::_flush_less'),
     );
     
