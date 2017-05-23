@@ -1,6 +1,7 @@
 name: LESS CSS Preprocessor
 type: module
 description: 'Allows themes or modules to use LESS files.'
+version: 8.x-1.0-alpha1
 core: '8.x'
 dependencies:
   - libraries
